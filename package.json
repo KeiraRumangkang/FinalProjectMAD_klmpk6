@@ -1,0 +1,23 @@
+{
+  "name": "finalprojectmad_klmpk6",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KeiraRumangkang/FinalProjectMAD_klmpk6.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KeiraRumangkang/FinalProjectMAD_klmpk6/issues"
+  },
+  "homepage": "https://github.com/KeiraRumangkang/FinalProjectMAD_klmpk6#readme",
+  "dependencies": {
+    "convex": "^1.35.1"
+  }
+}
