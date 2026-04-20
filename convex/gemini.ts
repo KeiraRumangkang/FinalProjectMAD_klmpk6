@@ -17,11 +17,12 @@ export const askGemini = action({
     userMessage: v.string(),
   },
   handler: async (ctx, args) => {
+    // 1. Ambil API Key Groq dari brankas Convex
     // @ts-ignore
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) throw new Error("Gemini API Key belum ada di .env!");
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) throw new Error("Groq API Key belum diset di Dashboard Convex!");
 
-    // 1. Simpan pesan user
+    // 2. Simpan pesan user ke database
     // @ts-ignore
     await ctx.runMutation(api.messages.sendMessage, {
       sessionId: args.sessionId,
@@ -29,52 +30,59 @@ export const askGemini = action({
       content: args.userMessage,
     });
 
-    // 2. Ambil history
+    // 3. Ambil riwayat percakapan
     // @ts-ignore
     const history: any[] = await ctx.runQuery(api.messages.getMessages, {
       sessionId: args.sessionId,
     });
 
-    // 3. Format history
+    // 4. Format history khusus untuk standar Groq / OpenAI
     const formattedHistory = history.map((msg: any) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
+      role: msg.role === "assistant" ? "assistant" : "user",
+      content: msg.content,
     }));
 
-    // 4. Panggil Gemini
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: formattedHistory,
-          systemInstruction: {
-            role: "system",
-            parts: [{ text: SOCRATIC_SYSTEM_PROMPT }],
-          },
-        }),
-      }
-    );
+    // Masukkan instruksi Sokratik di urutan paling atas sebagai "system"
+    formattedHistory.unshift({
+      role: "system",
+      content: SOCRATIC_SYSTEM_PROMPT
+    });
+
+    // 5. Panggil Groq API (menggunakan model Llama 3)
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { 
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant", // Model buatan Meta yang gratis dan ngebut
+        messages: formattedHistory,
+        temperature: 0.7, // Kreativitas tutor Sokratik
+        max_tokens: 1024
+      }),
+    });
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error("Alasan Google menolak:", errorText);
-        throw new Error(`Gagal menelepon Gemini API. Cek terminal/log! Detail: ${errorText}`);
+        console.error("Alasan Groq menolak:", errorText);
+        throw new Error(`Gagal menelepon Groq API. Cek terminal! Detail: ${errorText}`);
     }
 
     const data = await response.json();
-    const geminiReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, saya tidak bisa merespons saat ini.";
+    
+    // Parsing balasan ala OpenAI/Groq
+    const aiReply = data.choices[0].message.content || "Maaf, saya tidak bisa merespons saat ini.";
 
-    // 5. Simpan balasan AI
+    // 6. Simpan balasan AI ke database
     // @ts-ignore
     await ctx.runMutation(api.messages.sendMessage, {
       sessionId: args.sessionId,
       role: "assistant",
-      content: geminiReply,
+      content: aiReply,
     });
 
-    return geminiReply;
+    return aiReply;
   },
 });
 
@@ -84,8 +92,8 @@ export const generateSummary = action({
   },
   handler: async (ctx, args) => {
     // @ts-ignore
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) throw new Error("Gemini API Key belum ada!");
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) throw new Error("Groq API Key belum ada di Dashboard!");
 
     // @ts-ignore
     const history: any[] = await ctx.runQuery(api.messages.getMessages, {
@@ -98,7 +106,7 @@ export const generateSummary = action({
 
     const SUMMARY_PROMPT = `
       Baca seluruh percakapan berikut ini dan buatkan rangkuman.
-      Kembalikan dalam format JSON persis seperti ini, tanpa tambahan teks apapun di luar JSON:
+      Kembalikan dalam format JSON persis seperti ini, tanpa tambahan teks apapun di luar JSON (jangan pakai markdown \`\`\`json):
       {
         "problem": "Masalah utama yang ditanyakan",
         "keyConcepts": "Konsep kunci yang dipelajari",
@@ -110,24 +118,28 @@ export const generateSummary = action({
       ${fullConversation}
     `;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: SUMMARY_PROMPT }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-          }
-        }),
-      }
-    );
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { 
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: SUMMARY_PROMPT }],
+        response_format: { type: "json_object" }, // Memaksa Groq mengeluarkan format JSON murni
+        temperature: 0.2 // Dibuat rendah agar JSON-nya stabil dan tidak ngawur
+      }),
+    });
 
-    if (!response.ok) throw new Error("Gagal generate summary");
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Groq Summary Error:", errorText);
+        throw new Error("Gagal generate summary via Groq");
+    }
 
     const data = await response.json();
-    const jsonString = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const jsonString = data.choices[0].message.content;
     
     return JSON.parse(jsonString);
   },
