@@ -1,112 +1,124 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React from 'react';
+import { 
+  View, Text, ScrollView, TouchableOpacity, 
+  SafeAreaView, Image 
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+export default function LibraryScreen() {
+  const router = useRouter();
 
-export default function TabTwoScreen() {
+  const sessions = [
+    {
+      id: 1,
+      title: "Masalah Awal",
+      desc: "Exploring the fundamental dissonance between professional productivity and creative stillness. Why does the modern workspace repel deep thought?",
+      date: "12 Okt 2023",
+      type: "Socratic Session",
+      status: "Continue Inquiry",
+      active: true
+    },
+    {
+      id: 2,
+      title: "Paradoks Efisiensi",
+      desc: "If every tool makes us faster, why do we feel we have less time? A reflection on the acceleration of digital craftsmanship.",
+      date: "08 Okt 2023",
+      type: "Socratic Session",
+      status: "Read Insights",
+      active: false
+    },
+    {
+      id: 3,
+      title: "Estetika Kesunyian",
+      desc: "The role of negative space in information design. How much can we remove before the message loses its essence?",
+      date: "01 Okt 2023",
+      type: "Socratic Session",
+      status: "Review Note",
+      active: false
+    }
+  ];
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
+    <SafeAreaView className="flex-1 bg-[#fcf8ff]">
+      {/* HEADER */}
+      <View className="flex-row justify-between items-center px-8 py-4 bg-white border-b border-indigo-50 shadow-sm">
+        <View className="flex-row items-center gap-4">
+          <TouchableOpacity onPress={() => router.back()} className="p-2 rounded-full">
+            <MaterialIcons name="menu" size={24} color="#474650" />
+          </TouchableOpacity>
+          <Text className="text-xl font-serif font-medium text-gray-800">My Library</Text>
+        </View>
+        <Image 
+          source={{ uri: 'https://i.pravatar.cc/150?img=1' }} 
+          className="w-10 h-10 rounded-full border border-indigo-100"
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+      </View>
+
+      <ScrollView className="flex-1 px-6 pt-8" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+        
+        {/* HERO SECTION */}
+        <View className="mb-8">
+          <View className="flex-row justify-between items-baseline mb-2">
+            <Text className="text-3xl font-serif font-medium text-[#1c1b21]">Study Journal</Text>
+            <Text className="text-[10px] text-[#777682] font-bold uppercase tracking-widest">34 Sessions</Text>
+          </View>
+          <Text className="text-lg text-[#474650] font-serif leading-relaxed">
+            Review your intellectual progress and revisit past Socratic inquiries.
+          </Text>
+        </View>
+
+        {/* FILTERS */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row mb-8">
+          <TouchableOpacity className="bg-[#e2dfff] px-6 py-2 rounded-full mr-3">
+            <Text className="text-[#130c59] font-medium">Newest</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="bg-[#f6f2fb] px-6 py-2 rounded-full mr-3">
+            <Text className="text-[#474650] font-medium">Most Deep</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="bg-[#f6f2fb] px-6 py-2 rounded-full mr-3">
+            <Text className="text-[#474650] font-medium">Unfinished</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* SESSION LIST CARD */}
+        <View className="flex-col gap-6">
+          {sessions.map((item) => (
+            <TouchableOpacity 
+              key={item.id} 
+              className={`bg-white p-6 rounded-2xl border-l-4 shadow-sm ${item.active ? 'border-[#58569f]' : 'border-transparent'}`}
+              style={{ elevation: 2 }}
+            >
+              <View className="flex-row justify-between mb-4">
+                <View className="flex-row items-center gap-2">
+                  <MaterialIcons name="psychology" size={18} color="#58569f" />
+                  <Text className="text-[10px] font-bold text-[#58569f] uppercase tracking-wider">{item.type}</Text>
+                </View>
+                <Text className="text-[11px] text-[#777682]">{item.date}</Text>
+              </View>
+              
+              <Text className="text-xl font-serif font-bold text-[#1c1b21] mb-2">{item.title}</Text>
+              <Text className="text-[#474650] leading-relaxed mb-6" numberOfLines={2}>{item.desc}</Text>
+              
+              <View className="flex-row justify-between items-center">
+                <View className="w-8 h-8 rounded-full bg-[#e2dfff] items-center justify-center">
+                  <Text className="text-[10px] font-bold text-[#58569f]">AI</Text>
+                </View>
+                <View className="flex-row items-center">
+                  <Text className="text-[#58569f] font-bold text-sm mr-1">{item.status}</Text>
+                  <MaterialIcons name="arrow-forward" size={16} color="#58569f" />
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* FOOTER */}
+        <View className="py-12 items-center opacity-30">
+          <View className="w-12 h-1 bg-[#8b89d6] rounded-full mb-4" />
+          <Text className="font-serif italic text-[#474650]">End of your intellectual path.</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-});
