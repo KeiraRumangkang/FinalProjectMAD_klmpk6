@@ -8,13 +8,25 @@
  * @module
  */
 
+import type * as gemini from "../gemini.js";
+import type * as messages from "../messages.js";
+import type * as notes from "../notes.js";
+import type * as sessions from "../sessions.js";
+import type * as users from "../users.js";
+
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
 } from "convex/server";
 
-declare const fullApi: ApiFromModules<{}>;
+declare const fullApi: ApiFromModules<{
+  gemini: typeof gemini;
+  messages: typeof messages;
+  notes: typeof notes;
+  sessions: typeof sessions;
+  users: typeof users;
+}>;
 
 /**
  * A utility for referencing Convex functions in your app's public API.
