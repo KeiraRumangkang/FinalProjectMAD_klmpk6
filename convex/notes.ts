@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 
-// 1. Simpan hasil rangkuman dari Gemini
+// 1. Simpan hasil rangkuman dari Groq AI
 export const createNote = mutation({
   args: {
     userId: v.id("users"),
@@ -12,7 +12,7 @@ export const createNote = mutation({
     finalAnswer: v.string(),
   },
   handler: async (ctx, args) => {
-    await ctx.db.insert("notes", {
+    const noteId = await ctx.db.insert("notes", {
       userId: args.userId,
       sessionId: args.sessionId,
       problem: args.problem,
@@ -22,6 +22,9 @@ export const createNote = mutation({
       isEdited: false,
       createdAt: Date.now(),
     });
+    
+    // Mengembalikan ID agar frontend bisa langsung membuka halaman note ini
+    return noteId; 
   },
 });
 
