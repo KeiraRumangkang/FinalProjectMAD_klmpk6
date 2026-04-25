@@ -68,7 +68,7 @@ export default function ChatSessionScreen() {
               <View className="px-6 pb-6">
                 <View className="border-l-2 border-[#8b89d6] pl-4">
                   <Text className="text-[15px] text-[#474650] italic leading-relaxed">
-                    "Dalam sebuah sistem ekonomi yang tertutup, bagaimana peningkatan tabungan masyarakat dapat mempengaruhi investasi jangka panjang tanpa menyebabkan deflasi yang berlebihan?"
+                    {'"Dalam sebuah sistem ekonomi yang tertutup, bagaimana peningkatan tabungan masyarakat dapat mempengaruhi investasi jangka panjang tanpa menyebabkan deflasi yang berlebihan?"'}
                   </Text>
                 </View>
               </View>

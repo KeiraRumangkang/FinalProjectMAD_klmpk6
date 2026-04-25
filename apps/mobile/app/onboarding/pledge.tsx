@@ -28,7 +28,7 @@ export default function PledgeScreen() {
           
           <MaterialIcons name="format-quote" size={48} color="#E0E7FF" className="mb-2" />
           <Text className="text-lg text-gray-800 font-medium italic text-center leading-relaxed mb-6">
-            "Saya berkomitmen untuk belajar secara mandiri, tidak meminta jawaban instan, dan benar-benar memahami setiap proses berpikir."
+            {'"Saya berkomitmen untuk belajar secara mandiri, tidak meminta jawaban instan, dan benar-benar memahami setiap proses berpikir."'}
           </Text>
           
           <View className="pt-4 border-t border-gray-100 w-full">
