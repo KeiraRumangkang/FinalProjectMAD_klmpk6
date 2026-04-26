@@ -30,7 +30,17 @@ export const completeSession = mutation({
   },
 });
 
-// 3. Ambil daftar sesi yang masih "active" (ditampilkan di Active Struggles Dashboard)
+// 3. Ambil detail sesi untuk layar chat
+export const getSessionById = query({
+  args: {
+    sessionId: v.id("sessions"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.sessionId);
+  },
+});
+
+// 4. Ambil daftar sesi yang masih "active" (ditampilkan di Active Struggles Dashboard)
 export const getActiveSessions = query({
   args: {
     userId: v.id("users"),
@@ -40,6 +50,19 @@ export const getActiveSessions = query({
       .query("sessions")
       .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .filter((q) => q.eq(q.field("status"), "active")) 
+      .collect();
+  },
+});
+
+// 5. Ambil semua sesi milik user untuk statistik profil
+export const getSessions = query({
+  args: {
+    userId: v.id("users"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("sessions")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
       .collect();
   },
 });

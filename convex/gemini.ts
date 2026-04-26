@@ -22,25 +22,25 @@ export const askGemini = action({
     const GROQ_API_KEY = process.env.GROQ_API_KEY;
     if (!GROQ_API_KEY) throw new Error("Groq API Key belum diset di Dashboard Convex!");
 
-    // 2. Simpan pesan user ke database
-    // @ts-ignore
-    await ctx.runMutation(api.messages.sendMessage, {
-      sessionId: args.sessionId,
-      role: "user",
-      content: args.userMessage,
-    });
-
-    // 3. Ambil riwayat percakapan
+    // 2. Ambil riwayat percakapan
     // @ts-ignore
     const history: any[] = await ctx.runQuery(api.messages.getMessages, {
       sessionId: args.sessionId,
     });
 
-    // 4. Format history khusus untuk standar Groq / OpenAI
+    // 3. Format history khusus untuk standar Groq / OpenAI
     const formattedHistory = history.map((msg: any) => ({
       role: msg.role === "assistant" ? "assistant" : "user",
       content: msg.content,
     }));
+
+    const lastMessage = formattedHistory[formattedHistory.length - 1];
+    if (lastMessage?.role !== "user" || lastMessage.content !== args.userMessage) {
+      formattedHistory.push({
+        role: "user",
+        content: args.userMessage,
+      });
+    }
 
     // Masukkan instruksi Sokratik di urutan paling atas sebagai "system"
     formattedHistory.unshift({
@@ -48,7 +48,7 @@ export const askGemini = action({
       content: SOCRATIC_SYSTEM_PROMPT
     });
 
-    // 5. Panggil Groq API (menggunakan model Llama 3)
+    // 4. Panggil Groq API (menggunakan model Llama 3)
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { 
@@ -74,7 +74,7 @@ export const askGemini = action({
     // Parsing balasan ala OpenAI/Groq
     const aiReply = data.choices[0].message.content || "Maaf, saya tidak bisa merespons saat ini.";
 
-    // 6. Simpan balasan AI ke database
+    // 5. Simpan balasan AI ke database
     // @ts-ignore
     await ctx.runMutation(api.messages.sendMessage, {
       sessionId: args.sessionId,
