@@ -1,13 +1,70 @@
 import React from 'react';
 import { 
   View, Text, ScrollView, TouchableOpacity, 
-  SafeAreaView, Image, Dimensions 
+  SafeAreaView, Image 
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useClerk, useUser } from '@clerk/clerk-expo';
+import { useQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { signOut } = useClerk();
+  const { user } = useUser();
+  const convexUser = useQuery(
+    api.users.getUser,
+    user?.id ? { clerkId: user.id } : 'skip'
+  );
+  const streakData = useQuery(
+    api.users.getUserStreak,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+  const notes = useQuery(
+    api.notes.getNotes,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+  const sessions = useQuery(
+    api.sessions.getSessions,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+  const activeSessions = useQuery(
+    api.sessions.getActiveSessions,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+
+  const displayName = user?.fullName || user?.firstName || convexUser?.name || 'Scholar';
+  const displayEmail = user?.primaryEmailAddress?.emailAddress || convexUser?.email || 'scholar@nexarity.app';
+  const avatarUrl = user?.imageUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+  const fieldLabel = convexUser?.field || 'Scholar';
+  const streakCount = streakData?.streak ?? 0;
+  const sessionCount = sessions?.length ?? 0;
+  const notesCount = notes?.length ?? 0;
+  const activeSessionCount = activeSessions?.length ?? 0;
+  const firstSession = sessions?.slice().sort((a, b) => a.createdAt - b.createdAt)[0];
+
+  const formatSessionDate = (timestamp?: number) => {
+    if (!timestamp) return 'Belum ada sesi';
+
+    return new Date(timestamp).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    router.replace('/login');
+  };
+
+  const menuItems = [
+    { icon: 'person-edit', label: 'Edit Profile', color: '#4338ca', onPress: () => router.push('/profile/edit') },
+    { icon: 'settings-suggest', label: 'Pengaturan', color: '#4338ca', onPress: () => router.push('/settings') },
+    { icon: 'help-center', label: 'Bantuan', color: '#4338ca', onPress: () => router.push('/settings') },
+    { icon: 'logout', label: 'Logout', color: '#ef4444', onPress: handleLogout },
+  ];
 
   return (
     <SafeAreaView className="flex-1 bg-[#fcf8ff]">
@@ -17,7 +74,7 @@ export default function ProfileScreen() {
           <MaterialIcons name="arrow-back" size={24} color="#1c1b21" />
         </TouchableOpacity>
         <Text className="text-xl font-serif font-medium text-gray-900">Profil</Text>
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push('/settings')}>
           <MaterialIcons name="settings" size={24} color="#94a3b8" />
         </TouchableOpacity>
       </View>
@@ -28,7 +85,7 @@ export default function ProfileScreen() {
           <View className="relative">
             <View className="w-28 h-28 rounded-full border-4 border-indigo-50 shadow-lg overflow-hidden">
               <Image 
-                source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} 
+                source={{ uri: avatarUrl }} 
                 className="w-full h-full"
               />
             </View>
@@ -37,12 +94,12 @@ export default function ProfileScreen() {
             </View>
           </View>
           
-          <Text className="text-2xl font-bold text-gray-900 mt-4">Kelompok 6</Text>
-          <Text className="text-gray-500 font-medium">alex@example.com</Text>
+          <Text className="text-2xl font-bold text-gray-900 mt-4">{displayName}</Text>
+          <Text className="text-gray-500 font-medium">{displayEmail}</Text>
           
           <View className="mt-4 px-4 py-1.5 bg-indigo-100 rounded-full flex-row items-center gap-2">
             <MaterialIcons name="psychology" size={16} color="#4338ca" />
-            <Text className="text-indigo-700 font-bold text-xs uppercase tracking-widest">Artificial Intelligence</Text>
+            <Text className="text-indigo-700 font-bold text-xs uppercase tracking-widest">{fieldLabel}</Text>
           </View>
         </View>
 
@@ -53,7 +110,7 @@ export default function ProfileScreen() {
             <View className="relative z-10 flex-row justify-between items-start">
               <View>
                 <Text className="text-white/70 text-[10px] font-bold uppercase tracking-widest mb-1">Daily Focus</Text>
-                <Text className="text-white text-2xl font-bold font-serif">🔥 7 Day Streak</Text>
+                <Text className="text-white text-2xl font-bold font-serif">🔥 {streakCount} Day Streak</Text>
                 <Text className="text-indigo-100 text-sm mt-1">Kamu konsisten belajar!</Text>
               </View>
               <View className="w-12 h-12 bg-white/20 rounded-2xl items-center justify-center">
@@ -66,9 +123,9 @@ export default function ProfileScreen() {
         {/* Stats Grid */}
         <View className="flex-row px-6 gap-4 mb-10">
           {[
-            { label: 'Sessions', val: '34', color: 'text-indigo-600' },
-            { label: 'Notes', val: '12', color: 'text-indigo-600' },
-            { label: 'Struggles', val: '3', color: 'text-red-500' }
+            { label: 'Sessions', val: String(sessionCount), color: 'text-indigo-600' },
+            { label: 'Notes', val: String(notesCount), color: 'text-indigo-600' },
+            { label: 'Struggles', val: String(activeSessionCount), color: 'text-red-500' }
           ].map((stat, i) => (
             <View key={i} className="flex-1 bg-white p-4 rounded-2xl items-center border border-indigo-50 shadow-sm">
               <Text className={`text-2xl font-bold ${stat.color}`}>{stat.val}</Text>
@@ -89,7 +146,7 @@ export default function ProfileScreen() {
             <View className="mb-8 relative">
               <View className="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-indigo-600 border-2 border-white" />
               <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
-                <Text className="text-xs font-bold text-indigo-400 mb-1">June 12, 2023</Text>
+                <Text className="text-xs font-bold text-indigo-400 mb-1">{formatSessionDate(firstSession?.createdAt)}</Text>
                 <Text className="font-bold text-gray-900">First Session</Text>
                 <Text className="text-gray-500 text-sm mt-1 leading-5">Langkah pertama di Nexarity dimulai.</Text>
               </View>
@@ -99,8 +156,8 @@ export default function ProfileScreen() {
             <View className="relative">
               <View className="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-indigo-300 border-2 border-white" />
               <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
-                <Text className="text-xs font-bold text-indigo-400 mb-1">Yesterday</Text>
-                <Text className="font-bold text-gray-900">5-day streak</Text>
+                <Text className="text-xs font-bold text-indigo-400 mb-1">{streakData?.lastActiveDate || 'Belum aktif'}</Text>
+                <Text className="font-bold text-gray-900">{streakCount}-day streak</Text>
                 <Text className="text-gray-500 text-sm mt-1 leading-5">Momentum belajar terbentuk sempurna.</Text>
               </View>
             </View>
@@ -110,15 +167,11 @@ export default function ProfileScreen() {
         {/* Action Menu */}
         <View className="px-6 mb-24">
           <View className="bg-gray-100/50 rounded-[32px] overflow-hidden">
-            {[
-              { icon: 'person-edit', label: 'Edit Profile', color: '#4338ca' },
-              { icon: 'settings-suggest', label: 'Pengaturan', color: '#4338ca' },
-              { icon: 'help-center', label: 'Bantuan', color: '#4338ca' },
-              { icon: 'logout', label: 'Logout', color: '#ef4444' },
-            ].map((item, i) => (
+            {menuItems.map((item, i) => (
               <TouchableOpacity 
                 key={i} 
                 className="flex-row items-center justify-between p-5 border-b border-white/50"
+                onPress={item.onPress}
               >
                 <View className="flex-row items-center gap-4">
                   <View className="w-10 h-10 bg-white rounded-xl items-center justify-center shadow-sm">
@@ -137,7 +190,7 @@ export default function ProfileScreen() {
 
       {/* Bottom Navigation Mockup (Agar Visual Sesuai) */}
       <View className="absolute bottom-0 w-full flex-row justify-around items-center px-4 py-3 bg-white/80 border-t border-indigo-50">
-         <TouchableOpacity onPress={() => router.push('/note-detail')} className="items-center opacity-40">
+         <TouchableOpacity onPress={() => router.push('/library')} className="items-center opacity-40">
            <MaterialIcons name="auto-stories" size={24} color="#64748b" />
            <Text className="text-[10px] mt-1">Library</Text>
          </TouchableOpacity>

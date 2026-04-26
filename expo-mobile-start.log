@@ -1,0 +1,11 @@
+
+> finalprojectmad_klmpk6@1.0.0 start
+> npm --prefix apps/mobile run start -- --clear --lan --port 8081
+
+
+> mobile@1.0.0 start
+> expo start --clear --lan --port 8081
+
+Starting project at C:\Users\RaHuL\Desktop\ariellya\MAD_Nexarity\FinalProjectMAD_klmpk6\apps\mobile
+› Port 8081 is being used by another process
+› Skipping dev server

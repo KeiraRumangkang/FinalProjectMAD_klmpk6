@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
+  ActivityIndicator,
   View, 
   Text, 
   TextInput, 
@@ -9,43 +10,126 @@ import {
   Image 
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useUser } from '@clerk/clerk-expo';
+import { useAction, useMutation, useQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
+import type { Id } from '../../../convex/_generated/dataModel';
 
 export default function SummaryScreen() {
   const router = useRouter();
+  const { sessionId } = useLocalSearchParams();
+  const { user } = useUser();
+  const sessionIdValue = Array.isArray(sessionId) ? sessionId[0] : sessionId;
+  const typedSessionId = sessionIdValue as Id<'sessions'> | undefined;
+  const hasGeneratedSummary = useRef(false);
 
-  const [masalah, setMasalah] = useState('Awalnya saya bingung bagaimana cara mengimplementasikan visual tokens yang konsisten di seluruh platform mobile tanpa mengorbankan performa render.');
-  const [konsep, setKonsep] = useState('• Tonal Layering: Menggunakan bayangan ambient untuk hirarki.\n• Semantic Shell: Struktur navigasi yang adaptif.\n• Baseline Grid: Ritme vertikal 8px untuk keteraturan.');
-  const [alur, setAlur] = useState('1. Menganalisis dokumentasi desain system yang ada.\n2. Melakukan audit terhadap palet warna yang tidak sesuai standar aksesibilitas.\n3. Melakukan iterasi pada komponen Shell untuk mendukung context-aware navigation.');
-  const [jawaban, setJawaban] = useState('Implementasi visual tokens yang efektif membutuhkan pemisahan yang jelas antara Identity (JSON) dan Visual Style (Tailwind Config), di mana context-aware logic mengontrol visibilitas shell navigasi.');
+  const [summaryData, setSummaryData] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [masalah, setMasalah] = useState('');
+  const [konsep, setKonsep] = useState('');
+  const [alur, setAlur] = useState('');
+  const [jawaban, setJawaban] = useState('');
+
+  const sessionData = useQuery(
+    api.sessions.getSessionById,
+    typedSessionId ? { sessionId: typedSessionId } : 'skip'
+  );
+  const convexUser = useQuery(
+    api.users.getUser,
+    user?.id ? { clerkId: user.id } : 'skip'
+  );
+  const generateSummary = useAction(api.gemini.generateSummary);
+  const createNote = useMutation(api.notes.createNote);
+  const updateStreak = useMutation(api.users.updateStreak);
+
+  const stringifySummaryValue = (value: unknown, fallback = '') => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => (typeof item === 'string' ? item : JSON.stringify(item)))
+        .join('\n');
+    }
+
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    if (value === null || value === undefined) {
+      return fallback;
+    }
+
+    return JSON.stringify(value, null, 2);
+  };
+
+  useEffect(() => {
+    if (!typedSessionId || summaryData || hasGeneratedSummary.current) return;
+    if (sessionData === undefined) return;
+
+    hasGeneratedSummary.current = true;
+
+    const loadSummary = async () => {
+      try {
+        setIsGenerating(true);
+
+        const generatedSummary = await generateSummary({ sessionId: typedSessionId });
+        const generatedProblem = stringifySummaryValue(
+          generatedSummary?.problem,
+          sessionData?.problem || 'Sesi Pembelajaran'
+        );
+        const generatedKeyConcepts = stringifySummaryValue(generatedSummary?.keyConcepts);
+        const generatedThinkingFlow = stringifySummaryValue(generatedSummary?.thinkingFlow);
+        const generatedFinalAnswer = stringifySummaryValue(
+          generatedSummary?.finalAnswer,
+          JSON.stringify(generatedSummary)
+        );
+
+        setSummaryData(generatedSummary);
+        setMasalah(generatedProblem);
+        setKonsep(generatedKeyConcepts);
+        setAlur(generatedThinkingFlow);
+        setJawaban(generatedFinalAnswer);
+      } catch (error) {
+        console.error('Gagal membuat ringkasan:', error);
+        setSummaryData({});
+        setMasalah(sessionData?.problem || 'Sesi Pembelajaran');
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+
+    void loadSummary();
+  }, [typedSessionId, summaryData, sessionData, generateSummary]);
 
   const handleSaveToLibrary = async () => {
+    if (!user?.id || !typedSessionId || !convexUser?._id || isSaving) return;
+
     try {
-      const newSession = {
-        id: Date.now().toString(),
-        date: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
-        title: "Refleksi: " + masalah.split(' ').slice(0, 3).join(' ') + "...", 
-        summary: jawaban, 
-        status: 'Review Note' 
-      };
+      setIsSaving(true);
 
-      const existingData = await AsyncStorage.getItem('@my_library');
-      let libraryData = existingData ? JSON.parse(existingData) : [];
-      libraryData.unshift(newSession);
-      await AsyncStorage.setItem('@my_library', JSON.stringify(libraryData));
+      await createNote({
+        userId: convexUser._id,
+        sessionId: typedSessionId,
+        problem: masalah || sessionData?.problem || 'Sesi Pembelajaran',
+        keyConcepts: konsep || stringifySummaryValue(summaryData?.keyConcepts),
+        thinkingFlow: alur || stringifySummaryValue(summaryData?.thinkingFlow),
+        finalAnswer: jawaban || stringifySummaryValue(summaryData?.finalAnswer, JSON.stringify(summaryData)),
+      });
 
-      router.push('/library');
-      
+      await updateStreak({ userId: convexUser._id });
+
+      router.replace('/dashboard');
     } catch (error) {
       console.error('Gagal menyimpan ke Library:', error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   return (
     <SafeAreaView className="flex-1 bg-[#fcf8ff]">
       {/* ========================================== */}
-      {/* HEADER (IKON TELAH DIUBAH MENJADI BACK)    */}
+      {/* HEADER (IKON TELAH DIUBAH MENJADI BACK)    */}
       {/* ========================================== */}
       <View className="flex-row justify-between items-center px-8 py-4 bg-[#FDFDFE] border-b border-[#8B89D6]/10 z-50">
         {/* Perubahan di sini: name="arrow-back" */}
@@ -57,7 +141,7 @@ export default function SummaryScreen() {
         
         <View className="w-10 h-10 rounded-full bg-[#f0ecf6] overflow-hidden">
           <Image 
-            source={{ uri: 'https://i.pravatar.cc/150?img=1' }} 
+            source={{ uri: user?.imageUrl || 'https://i.pravatar.cc/150?img=1' }} 
             className="w-full h-full"
           />
         </View>
@@ -78,68 +162,79 @@ export default function SummaryScreen() {
 
         {/* Reflection Cards Stack */}
         <View className="space-y-6">
-          <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6">
-            <View className="flex-row items-center gap-3 mb-4">
-              <MaterialIcons name="lightbulb" size={24} color="#58569f" />
-              <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Masalah Awal</Text>
+          {isGenerating ? (
+            <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6">
+              <ActivityIndicator color="#58569f" />
+              <Text className="text-[16px] text-[#474650] leading-relaxed text-center mt-4">
+                Menyusun ringkasan pemahamanmu...
+              </Text>
             </View>
-            <TextInput
-              multiline
-              value={masalah}
-              onChangeText={setMasalah}
-              className="text-[16px] text-[#474650] leading-relaxed min-h-[100px]"
-              placeholder="Apa pertanyaan atau kendala utama yang kamu hadapi?"
-              textAlignVertical="top"
-            />
-          </View>
+          ) : (
+            <>
+              <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6">
+                <View className="flex-row items-center gap-3 mb-4">
+                  <MaterialIcons name="lightbulb" size={24} color="#58569f" />
+                  <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Masalah Awal</Text>
+                </View>
+                <TextInput
+                  multiline
+                  value={masalah}
+                  onChangeText={setMasalah}
+                  className="text-[16px] text-[#474650] leading-relaxed min-h-[100px]"
+                  placeholder="Apa pertanyaan atau kendala utama yang kamu hadapi?"
+                  textAlignVertical="top"
+                />
+              </View>
 
-          <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6">
-            <View className="flex-row items-center gap-3 mb-4">
-              <MaterialIcons name="key" size={24} color="#58569f" />
-              <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Konsep Kunci</Text>
-            </View>
-            <TextInput
-              multiline
-              value={konsep}
-              onChangeText={setKonsep}
-              className="text-[16px] text-[#474650] leading-relaxed min-h-[80px]"
-              placeholder="Sebutkan prinsip-prinsip utama yang kamu pelajari."
-              textAlignVertical="top"
-            />
-          </View>
+              <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6">
+                <View className="flex-row items-center gap-3 mb-4">
+                  <MaterialIcons name="key" size={24} color="#58569f" />
+                  <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Konsep Kunci</Text>
+                </View>
+                <TextInput
+                  multiline
+                  value={konsep}
+                  onChangeText={setKonsep}
+                  className="text-[16px] text-[#474650] leading-relaxed min-h-[80px]"
+                  placeholder="Sebutkan prinsip-prinsip utama yang kamu pelajari."
+                  textAlignVertical="top"
+                />
+              </View>
 
-          <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6 overflow-hidden relative">
-            <View className="absolute top-8 right-8 opacity-5">
-              <MaterialIcons name="route" size={100} color="#1c1b21" />
-            </View>
-            <View className="flex-row items-center gap-3 mb-4">
-              <MaterialIcons name="timeline" size={24} color="#58569f" />
-              <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Alur Pemikiran</Text>
-            </View>
-            <TextInput
-              multiline
-              value={alur}
-              onChangeText={setAlur}
-              className="text-[16px] text-[#474650] leading-relaxed min-h-[120px]"
-              placeholder="Bagaimana proses kamu mencapai kesimpulan?"
-              textAlignVertical="top"
-            />
-          </View>
+              <View className="bg-white rounded-[32px] p-8 border border-[#8b89d6]/10 shadow-lg shadow-indigo-100/50 mb-6 overflow-hidden relative">
+                <View className="absolute top-8 right-8 opacity-5">
+                  <MaterialIcons name="route" size={100} color="#1c1b21" />
+                </View>
+                <View className="flex-row items-center gap-3 mb-4">
+                  <MaterialIcons name="timeline" size={24} color="#58569f" />
+                  <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Alur Pemikiran</Text>
+                </View>
+                <TextInput
+                  multiline
+                  value={alur}
+                  onChangeText={setAlur}
+                  className="text-[16px] text-[#474650] leading-relaxed min-h-[120px]"
+                  placeholder="Bagaimana proses kamu mencapai kesimpulan?"
+                  textAlignVertical="top"
+                />
+              </View>
 
-          <View className="bg-[#58569f]/5 rounded-[32px] p-8 border-2 border-dashed border-[#58569f]/20 mb-6">
-            <View className="flex-row items-center gap-3 mb-4">
-              <MaterialIcons name="auto-awesome" size={24} color="#58569f" />
-              <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Jawaban Akhir</Text>
-            </View>
-            <TextInput
-              multiline
-              value={jawaban}
-              onChangeText={setJawaban}
-              className="text-[18px] text-[#1c1b21] font-medium leading-relaxed italic min-h-[100px]"
-              placeholder="Tuliskan kesimpulan final kamu di sini..."
-              textAlignVertical="top"
-            />
-          </View>
+              <View className="bg-[#58569f]/5 rounded-[32px] p-8 border-2 border-dashed border-[#58569f]/20 mb-6">
+                <View className="flex-row items-center gap-3 mb-4">
+                  <MaterialIcons name="auto-awesome" size={24} color="#58569f" />
+                  <Text className="text-[24px] font-serif font-semibold text-[#1c1b21]">Jawaban Akhir</Text>
+                </View>
+                <TextInput
+                  multiline
+                  value={jawaban}
+                  onChangeText={setJawaban}
+                  className="text-[18px] text-[#1c1b21] font-medium leading-relaxed italic min-h-[100px]"
+                  placeholder="Tuliskan kesimpulan final kamu di sini..."
+                  textAlignVertical="top"
+                />
+              </View>
+            </>
+          )}
         </View>
 
         {/* AI Guidance Prompt */}
@@ -158,10 +253,11 @@ export default function SummaryScreen() {
         <View className="mt-8 mb-12 items-center space-y-4">
           <TouchableOpacity 
             className="w-full py-4 bg-[#58569f] rounded-2xl shadow-xl shadow-indigo-200 flex-row items-center justify-center gap-3 active:scale-95 mb-4"
-            onPress={handleSaveToLibrary} 
+            onPress={handleSaveToLibrary}
+            disabled={isGenerating || isSaving}
           >
             <MaterialIcons name="archive" size={22} color="white" />
-            <Text className="text-white font-bold text-[16px]">Simpan ke Library</Text>
+            <Text className="text-white font-bold text-[16px]">{isSaving ? 'Menyimpan...' : 'Simpan ke Library'}</Text>
           </TouchableOpacity>
           
           <TouchableOpacity onPress={() => router.back()}>

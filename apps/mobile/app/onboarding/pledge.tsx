@@ -1,11 +1,40 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, SafeAreaView, ScrollView, Image } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useUser } from '@clerk/clerk-expo';
+import { useMutation, useQuery } from 'convex/react';
+import { api } from '../../../../convex/_generated/api';
 
 export default function PledgeScreen() {
   const router = useRouter();
+  const { field } = useLocalSearchParams<{ field?: string }>();
+  const { user } = useUser();
   const [isChecked, setIsChecked] = useState(false);
+  const convexUser = useQuery(
+    api.users.getUser,
+    user?.id ? { clerkId: user.id } : 'skip'
+  );
+  const completeOnboarding = useMutation(api.users.completeOnboarding);
+
+  const handleCompleteOnboarding = async () => {
+    if (!isChecked) return;
+
+    try {
+      if (!field || !convexUser?._id) {
+        throw new Error('Missing selected field or user profile.');
+      }
+
+      await completeOnboarding({
+        userId: convexUser._id,
+        field,
+      });
+
+      router.replace('/dashboard');
+    } catch (error) {
+      console.error('Complete onboarding error:', error);
+    }
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-indigo-50">
@@ -28,7 +57,7 @@ export default function PledgeScreen() {
           
           <MaterialIcons name="format-quote" size={48} color="#E0E7FF" className="mb-2" />
           <Text className="text-lg text-gray-800 font-medium italic text-center leading-relaxed mb-6">
-            "Saya berkomitmen untuk belajar secara mandiri, tidak meminta jawaban instan, dan benar-benar memahami setiap proses berpikir."
+            {'"Saya berkomitmen untuk belajar secara mandiri, tidak meminta jawaban instan, dan benar-benar memahami setiap proses berpikir."'}
           </Text>
           
           <View className="pt-4 border-t border-gray-100 w-full">
@@ -62,12 +91,7 @@ export default function PledgeScreen() {
               isChecked ? 'bg-indigo-800 shadow-md' : 'bg-indigo-200'
             }`}
             disabled={!isChecked}
-            onPress={() => {
-              // Nanti panggil update DB pledgeDone = true di sini
-              // Untuk sekarang kita arahkan ke dashboard
-              console.log("Pledge disetujui!");
-              router.replace('/dashboard'); // Pastikan file app/dashboard.tsx akan dibuat nanti
-            }}
+            onPress={handleCompleteOnboarding}
           >
             <Text className={`font-bold text-lg mr-2 ${isChecked ? 'text-white' : 'text-indigo-400'}`}>
               Saya Setuju & Lanjut

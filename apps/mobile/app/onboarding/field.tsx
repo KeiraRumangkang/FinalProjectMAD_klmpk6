@@ -77,8 +77,12 @@ export default function FieldSelectionScreen() {
         <TouchableOpacity 
           className="bg-indigo-800 py-4 rounded-xl flex-row justify-center items-center mb-8"
           onPress={() => {
-            console.log("Field terpilih:", selectedField);
-            router.push('/onboarding/pledge' as any);
+            if (!selectedField) return;
+
+            router.push({
+              pathname: '/onboarding/pledge',
+              params: { field: selectedField },
+            });
           }}
         >
           <Text className="text-white font-bold text-lg mr-2">Continue</Text>

@@ -1,16 +1,51 @@
 import React, { useState } from 'react';
+import { useClerk, useUser } from '@clerk/clerk-expo';
+import { useMutation, useQuery } from 'convex/react';
 import { 
   View, Text, ScrollView, TextInput, TouchableOpacity, 
   SafeAreaView, Modal, Pressable, Image 
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
+import { api } from '../../../convex/_generated/api';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const pathname = usePathname();
+  const { signOut } = useClerk();
+  const { user } = useUser();
   const [question, setQuestion] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const displayName = user?.firstName || user?.fullName || 'Student';
+  const avatarUrl = user?.imageUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
+  const convexUser = useQuery(
+    api.users.getUser,
+    user?.id ? { clerkId: user.id } : 'skip'
+  );
+  const streakData = useQuery(
+    api.users.getUserStreak,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+  const activeSessions = useQuery(
+    api.sessions.getActiveSessions,
+    convexUser?._id ? { userId: convexUser._id } : 'skip'
+  );
+  const createSession = useMutation(api.sessions.createSession);
+  const streakCount = streakData?.streak ?? 0;
+
+  const formatSessionDate = (timestamp: number) => {
+    return new Date(timestamp).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  };
+
+  const getSessionTitle = (problem: string) => {
+    const words = problem.trim().split(/\s+/).slice(0, 3).join(' ');
+    return words ? `${words}${problem.trim().split(/\s+/).length > 3 ? '...' : ''}` : 'Sesi Belajar';
+  };
 
   // Fungsi Helper untuk Navigasi & Tutup Drawer
   const navigateTo = (path: string) => {
@@ -20,9 +55,32 @@ export default function DashboardScreen() {
     router.push(path as any);
   };
 
-  const handleLogOut = () => {
+  const handleLogOut = async () => {
     setIsDrawerOpen(false);
+    await signOut();
     router.replace('/'); 
+  };
+
+  const handleStartSession = async () => {
+    if (!question.trim() || !convexUser?._id || isCreatingSession) return;
+
+    try {
+      setIsCreatingSession(true);
+      const newSessionId = await createSession({
+        userId: convexUser._id,
+        problem: question.trim(),
+      });
+
+      setQuestion('');
+      router.push({
+        pathname: '/chat/[sessionId]',
+        params: { sessionId: newSessionId },
+      });
+    } catch (error) {
+      console.warn('Create session failed:', error);
+    } finally {
+      setIsCreatingSession(false);
+    }
   };
 
   return (
@@ -46,7 +104,7 @@ export default function DashboardScreen() {
             >
               <View className="relative">
                 <Image 
-                  source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }} 
+                  source={{ uri: avatarUrl }} 
                   className="w-14 h-14 rounded-full border-2 border-indigo-100"
                 />
                 <View className="absolute bottom-0 right-0 bg-indigo-600 p-0.5 rounded-full border border-white">
@@ -54,7 +112,7 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <View>
-                <Text className="text-lg font-bold text-indigo-600 font-serif">Alex Rivai</Text>
+                <Text className="text-lg font-bold text-indigo-600 font-serif">{displayName}</Text>
                 <Text className="text-xs text-gray-500 font-serif">Socratic Learner</Text>
               </View>
             </TouchableOpacity>
@@ -94,20 +152,23 @@ export default function DashboardScreen() {
               
               {/* LIBRARY */}
               <TouchableOpacity 
-                className={`flex-row items-center gap-4 p-4 rounded-xl ${pathname === '/note-detail' ? 'bg-indigo-50' : ''}`}
-                onPress={() => navigateTo('/note-detail')}
+                className={`flex-row items-center gap-4 p-4 rounded-xl ${pathname === '/library' ? 'bg-indigo-50' : ''}`}
+                onPress={() => navigateTo('/library')}
               >
                 <MaterialIcons 
                   name="library-books" 
                   size={24} 
-                  color={pathname === '/note-detail' ? '#4338ca' : '#818cf8'} 
+                  color={pathname === '/library' ? '#4338ca' : '#818cf8'} 
                 />
-                <Text className={`text-base font-serif ${pathname === '/note-detail' ? 'text-indigo-700 font-bold' : 'text-gray-600'}`}>
+                <Text className={`text-base font-serif ${pathname === '/library' ? 'text-indigo-700 font-bold' : 'text-gray-600'}`}>
                   My Library
                 </Text>
               </TouchableOpacity>
               
-              <TouchableOpacity className="flex-row items-center gap-4 p-4 rounded-xl">
+              <TouchableOpacity 
+                className="flex-row items-center gap-4 p-4 rounded-xl"
+                onPress={() => navigateTo('/settings')}
+              >
                 <MaterialIcons name="settings" size={24} color="#818cf8" />
                 <Text className="text-base text-gray-600 font-serif">Settings</Text>
               </TouchableOpacity>
@@ -168,7 +229,7 @@ export default function DashboardScreen() {
       onPress={() => navigateTo('/profile')}
       className="flex-row items-center gap-2 px-4 py-2 bg-white rounded-full shadow-md border border-indigo-100"
     >
-      <Text className="text-base font-bold text-indigo-600">7</Text>
+      <Text className="text-base font-bold text-indigo-600">{streakCount}</Text>
       <Text className="text-base">🔥</Text>
     </TouchableOpacity>
 
@@ -201,9 +262,10 @@ export default function DashboardScreen() {
             </View>
             <TouchableOpacity 
               className="px-6 py-3 bg-[#e2dfff] rounded-full flex-row items-center gap-2"
-              onPress={() => router.push('/chat')}
+              onPress={handleStartSession}
+              disabled={isCreatingSession}
             >
-              <Text className="text-[#403e85] font-bold">Bimbing Saya</Text>
+              <Text className="text-[#403e85] font-bold">{isCreatingSession ? 'Membuka...' : 'Bimbing Saya'}</Text>
               <MaterialIcons name="auto-awesome" size={18} color="#403e85" />
             </TouchableOpacity>
           </View>
@@ -213,51 +275,66 @@ export default function DashboardScreen() {
         <View className="mb-8">
           <View className="flex-row justify-between items-end mb-4 px-1">
             <Text className="text-xl font-bold text-gray-900">Sedang Dipelajari</Text>
-            <TouchableOpacity onPress={() => router.push('/note-detail')}>
+            <TouchableOpacity onPress={() => router.push('/library')}>
               <Text className="text-sm font-semibold text-[#58569f]">Lihat Semua</Text>
             </TouchableOpacity>
           </View>
 
-          {/* PREMIUM CARD: PARADOKS EFISIENSI */}
-          <TouchableOpacity 
-            onPress={() => router.push('/note-detail')}
-            activeOpacity={0.9}
-            className="bg-[#4338ca] rounded-[32px] p-6 mb-6 shadow-xl shadow-indigo-200 relative overflow-hidden"
-          >
-            <View className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full" />
-            <View className="flex-row justify-between items-start mb-4">
-              <View className="px-3 py-1 bg-white/20 rounded-full">
-                <Text className="text-white text-[10px] font-bold uppercase tracking-widest">In Focus Session</Text>
-              </View>
-              <MaterialIcons name="bolt" size={20} color="#fbbf24" />
-            </View>
-            <Text className="text-white text-2xl font-serif font-bold mb-2">Paradoks Efisiensi</Text>
-            <Text className="text-indigo-100 text-sm leading-5 mb-6 font-light">
-              Menjelajahi mengapa produktivitas modern terkadang justru menghambat kreativitas mendalam.
-            </Text>
-            <View className="flex-row items-center justify-between border-t border-white/10 pt-4">
-              <Text className="text-white/80 text-xs italic">Socratic Method Active</Text>
-              <View className="flex-row items-center">
-                <Text className="text-white font-bold text-xs mr-1">Lanjutkan</Text>
-                <MaterialIcons name="chevron-right" size={18} color="white" />
-              </View>
-            </View>
-          </TouchableOpacity>
+          {activeSessions?.map((session, index) => {
+            const sessionTime = session._creationTime ?? session.createdAt;
+            const formattedDate = formatSessionDate(sessionTime);
+            const sessionRoute = {
+              pathname: '/chat/[sessionId]',
+              params: { sessionId: session._id },
+            } as const;
 
-          {/* List Item Standar */}
-          <TouchableOpacity 
-            className="flex-row items-center p-4 bg-white rounded-2xl border border-indigo-50 mb-3 shadow-sm"
-            onPress={() => router.push('/note-detail')}
-          >
-            <View className="w-12 h-12 bg-indigo-50 rounded-xl items-center justify-center mr-4">
-              <MaterialIcons name="calculate" size={24} color="#58569f" />
-            </View>
-            <View className="flex-1">
-              <Text className="font-bold text-gray-900">Trigonometri Dasar</Text>
-              <Text className="text-xs text-gray-400">2 jam yang lalu</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={20} color="#d1d5db" />
-          </TouchableOpacity>
+            if (index === 0) {
+              return (
+                <TouchableOpacity 
+                  key={session._id}
+                  onPress={() => router.push(sessionRoute)}
+                  activeOpacity={0.9}
+                  className="bg-[#4338ca] rounded-[32px] p-6 mb-6 shadow-xl shadow-indigo-200 relative overflow-hidden"
+                >
+                  <View className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full" />
+                  <View className="flex-row justify-between items-start mb-4">
+                    <View className="px-3 py-1 bg-white/20 rounded-full">
+                      <Text className="text-white text-[10px] font-bold uppercase tracking-widest">In Focus Session</Text>
+                    </View>
+                    <MaterialIcons name="bolt" size={20} color="#fbbf24" />
+                  </View>
+                  <Text className="text-white text-2xl font-serif font-bold mb-2">{getSessionTitle(session.problem)}</Text>
+                  <Text className="text-indigo-100 text-sm leading-5 mb-6 font-light">
+                    {session.problem}
+                  </Text>
+                  <View className="flex-row items-center justify-between border-t border-white/10 pt-4">
+                    <Text className="text-white/80 text-xs italic">{formattedDate}</Text>
+                    <View className="flex-row items-center">
+                      <Text className="text-white font-bold text-xs mr-1">Lanjutkan</Text>
+                      <MaterialIcons name="chevron-right" size={18} color="white" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
+
+            return (
+              <TouchableOpacity 
+                key={session._id}
+                className="flex-row items-center p-4 bg-white rounded-2xl border border-indigo-50 mb-3 shadow-sm"
+                onPress={() => router.push(sessionRoute)}
+              >
+                <View className="w-12 h-12 bg-indigo-50 rounded-xl items-center justify-center mr-4">
+                  <MaterialIcons name="calculate" size={24} color="#58569f" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-bold text-gray-900">{getSessionTitle(session.problem)}</Text>
+                  <Text className="text-xs text-gray-400">{formattedDate}</Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color="#d1d5db" />
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>

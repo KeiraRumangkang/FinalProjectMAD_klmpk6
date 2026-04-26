@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useClerk, useOAuth, useSignIn, useSignUp, useUser } from '@clerk/clerk-expo';
+import { useMutation, useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import {
+  Alert,
   View,
   Text,
   TextInput,
@@ -13,6 +16,8 @@ import {
   Image,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import { api } from '../../../convex/_generated/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -20,12 +25,255 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [hasRedirectedSignedInUser, setHasRedirectedSignedInUser] = useState(false);
+  const clerk = useClerk();
+  const { isLoaded: isUserLoaded, isSignedIn, user: currentUser } = useUser();
+  const { signIn, setActive, isLoaded: isSignInLoaded } = useSignIn();
+  const { signUp, setActive: setSignUpActive, isLoaded: isSignUpLoaded } = useSignUp();
+  const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
+  const convexUser = useQuery(
+    api.users.getUser,
+    currentUser?.id ? { clerkId: currentUser.id } : 'skip'
+  );
+  const upsertUser = useMutation(api.users.upsertUser);
 
-
-  const handleSignIn = () => {
-    // Handle sign in logic here
-    console.log('Sign in:', { email, password, rememberMe });
+  type ClerkUserForConvex = {
+    id?: string;
+    primaryEmailAddress?: { emailAddress?: string | null } | null;
+    emailAddresses?: Array<{ emailAddress?: string | null }>;
+    fullName?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
   };
+
+  const syncUserToConvex = async (sessionUser: ClerkUserForConvex | null | undefined, fallbackEmail = email.trim()) => {
+
+    const resolvedEmail =
+      sessionUser?.primaryEmailAddress?.emailAddress ??
+      sessionUser?.emailAddresses?.[0]?.emailAddress ??
+      fallbackEmail;
+
+    const resolvedName =
+      sessionUser?.fullName ||
+      [sessionUser?.firstName, sessionUser?.lastName].filter(Boolean).join(' ') ||
+      resolvedEmail?.split('@')[0] ||
+      'Nexarity User';
+
+    if (!sessionUser?.id || !resolvedEmail) {
+      throw new Error('Unable to read Clerk user profile after authentication.');
+    }
+
+    await upsertUser({
+      clerkId: sessionUser.id,
+      email: resolvedEmail,
+      name: resolvedName,
+    });
+  };
+
+  const syncActiveUserToConvex = async (sessionId: string, fallbackEmail = email.trim()) => {
+    const sessionUser =
+      clerk.client?.sessions?.find((session) => session.id === sessionId)?.user ??
+      clerk.user;
+
+    await syncUserToConvex(sessionUser, fallbackEmail);
+  };
+
+  const getAuthErrorMessage = (error: unknown) => {
+    const clerkError = error as {
+      errors?: Array<{ longMessage?: string; message?: string }>;
+      message?: string;
+    };
+
+    return (
+      clerkError.errors?.[0]?.longMessage ??
+      clerkError.errors?.[0]?.message ??
+      clerkError.message ??
+      'Authentication failed. Please try again.'
+    );
+  };
+
+  const handleSignIn = async () => {
+    if (isAuthenticating) return;
+
+    try {
+      if (isSignedIn && currentUser) {
+        await syncUserToConvex(currentUser);
+        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        return;
+      }
+
+      if (!isSignInLoaded || !signIn || !setActive) {
+        return;
+      }
+
+      if (!email.trim() || !password) {
+        Alert.alert('Sign in failed', 'Please enter your email and password.');
+        return;
+      }
+
+      setIsAuthenticating(true);
+
+      const signInAttempt = await signIn.create({
+        identifier: email.trim(),
+        password,
+      });
+
+      if (signInAttempt.status === 'complete' && signInAttempt.createdSessionId) {
+        await setActive({ session: signInAttempt.createdSessionId });
+        await syncActiveUserToConvex(signInAttempt.createdSessionId);
+        router.replace('/onboarding/field');
+      } else {
+        console.log('Sign in requires additional steps:', signInAttempt.status);
+      }
+    } catch (error) {
+      const message = getAuthErrorMessage(error);
+      if (message.toLowerCase().includes('already signed in') && currentUser) {
+        await syncUserToConvex(currentUser);
+        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        return;
+      }
+
+      console.warn('Sign in failed:', message);
+      Alert.alert('Sign in failed', message);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    if (isAuthenticating) return;
+
+    try {
+      if (isSignedIn && currentUser) {
+        await syncUserToConvex(currentUser);
+        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        return;
+      }
+
+      if (!isSignInLoaded || !isSignUpLoaded) {
+        return;
+      }
+
+      setIsAuthenticating(true);
+      WebBrowser.dismissAuthSession();
+
+      const {
+        createdSessionId,
+        setActive: oauthSetActive,
+      } = await startOAuthFlow();
+
+      if (createdSessionId) {
+        const activateSession = oauthSetActive ?? setActive;
+
+        if (!activateSession) {
+          throw new Error('Unable to activate Clerk session.');
+        }
+
+        await activateSession({ session: createdSessionId });
+        await syncActiveUserToConvex(createdSessionId);
+        router.replace('/onboarding/field');
+      }
+    } catch (error) {
+      const message = getAuthErrorMessage(error);
+      if (message.toLowerCase().includes('already signed in') && currentUser) {
+        await syncUserToConvex(currentUser);
+        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        return;
+      }
+
+      console.warn('Google sign in failed:', message);
+      Alert.alert('Google sign in failed', message);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleCreateAccount = async () => {
+    if (isAuthenticating) return;
+
+    try {
+      if (isSignedIn && currentUser) {
+        await syncUserToConvex(currentUser);
+        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        return;
+      }
+
+      if (!isSignUpLoaded || !signUp) {
+        return;
+      }
+
+      if (!email.trim() || !password) {
+        Alert.alert('Create account', 'Please enter an email and password first.');
+        return;
+      }
+
+      setIsAuthenticating(true);
+
+      const signUpAttempt = await signUp.create({
+        emailAddress: email.trim(),
+        password,
+      });
+
+      if (signUpAttempt.status === 'complete' && signUpAttempt.createdSessionId) {
+        const activateSession = setSignUpActive ?? setActive;
+
+        if (!activateSession) {
+          throw new Error('Unable to activate Clerk session.');
+        }
+
+        await activateSession({ session: signUpAttempt.createdSessionId });
+        await syncActiveUserToConvex(signUpAttempt.createdSessionId);
+        router.replace('/onboarding/field');
+        return;
+      }
+
+      await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      Alert.alert(
+        'Check your email',
+        'Your account was created. Please verify your email in Clerk before signing in.'
+      );
+    } catch (error) {
+      const message = getAuthErrorMessage(error);
+      console.warn('Create account failed:', message);
+      Alert.alert('Create account failed', message);
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      !isUserLoaded ||
+      !isSignedIn ||
+      !currentUser ||
+      hasRedirectedSignedInUser ||
+      convexUser === undefined
+    ) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const continueSignedInSession = async () => {
+      try {
+        await syncUserToConvex(currentUser);
+
+        if (isMounted) {
+          setHasRedirectedSignedInUser(true);
+          router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        }
+      } catch (error) {
+        console.warn('Continue signed-in session failed:', getAuthErrorMessage(error));
+      }
+    };
+
+    void continueSignedInSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isUserLoaded, isSignedIn, currentUser?.id, convexUser, hasRedirectedSignedInUser]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -58,7 +306,12 @@ export default function LoginScreen() {
               </View>
 
               {/* Google Sign In */}
-              <TouchableOpacity style={styles.googleButton} activeOpacity={0.8}>
+              <TouchableOpacity
+                style={styles.googleButton}
+                activeOpacity={0.8}
+                onPress={handleGoogleSignIn}
+                disabled={isAuthenticating}
+              >
                 <Image
                   source={{
                     uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBt1N6n6DUqxRSk7SKgiv3gp-Vf4cqHXlz8b9GKiPpXOXIs2RVWtEEUXTQoMVR2kkAgtJrpz4x2xRaiTun8gzNCrKjTuLQAz-IWQwdt3CqQwVIKBRFBLm-Kv0ik9f_rWq0kUxWJqNY4adYVR9ze8HDrA8ZHP0hhK-u9jTLweyGbzeAgdGBhiTDqo28bPRCem8DXR34i00X9qITd4AuzEmLTpCm-_AwfVztZ7VbR0Ia-7cmAEcJdkvPUn4-XJcPvqBFR7a3dHTXfjck',
@@ -139,7 +392,8 @@ export default function LoginScreen() {
               <TouchableOpacity
                 style={styles.signInButton}
                 activeOpacity={0.85}
-                onPress={() => router.replace('/onboarding/field')}
+                onPress={handleSignIn}
+                disabled={isAuthenticating}
               >
                 <Text style={styles.signInButtonText}>Sign In</Text>
               </TouchableOpacity>
@@ -149,7 +403,7 @@ export default function LoginScreen() {
             <View style={styles.cardFooter}>
               <Text style={styles.footerText}>
                 New to Scholar Portal?{' '}
-                <Text style={styles.footerLink}>Create an account</Text>
+                <Text style={styles.footerLink} onPress={handleCreateAccount}>Create an account</Text>
               </Text>
             </View>
           </View>
