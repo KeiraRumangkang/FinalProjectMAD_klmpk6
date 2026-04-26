@@ -61,34 +61,46 @@ export const updateStreak = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error("User tidak ditemukan");
 
-    // Ambil tanggal hari ini format YYYY-MM-DD
-    const today = new Date().toISOString().split("T")[0];
-    const lastActive = user.lastActiveDate;
+    const now = Date.now();
+    const dayInMs = 24 * 60 * 60 * 1000;
+    const startOfUtcDay = (timestamp: number) => {
+      const date = new Date(timestamp);
+      return Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate()
+      );
+    };
 
-    if (lastActive === today) {
-      // Sudah login hari ini, jangan ubah apa-apa
-      return;
+    const todayStart = startOfUtcDay(now);
+    const lastActiveTimestamp = user.lastActiveDate
+      ? Date.parse(user.lastActiveDate)
+      : Number.NaN;
+
+    if (Number.isNaN(lastActiveTimestamp)) {
+      await ctx.db.patch(args.userId, {
+        streak: 1,
+        lastActiveDate: new Date(now).toISOString(),
+      });
+
+      return { streak: 1 };
     }
 
-    // Hitung tanggal kemarin
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().split("T")[0];
+    const lastActiveStart = startOfUtcDay(lastActiveTimestamp);
+    const dayDifference = Math.floor((todayStart - lastActiveStart) / dayInMs);
 
-    let newStreak = user.streak;
-
-    if (lastActive === yesterday) {
-      // User aktif beruntun dari kemarin
-      newStreak += 1;
-    } else {
-      // Bolong, reset ke 1
-      newStreak = 1;
+    if (dayDifference === 0) {
+      return { streak: user.streak };
     }
+
+    const newStreak = dayDifference === 1 ? user.streak + 1 : 1;
 
     await ctx.db.patch(args.userId, {
       streak: newStreak,
-      lastActiveDate: today,
+      lastActiveDate: new Date(now).toISOString(),
     });
+
+    return { streak: newStreak };
   },
 });
 

@@ -29,10 +29,6 @@ export default function ProfileScreen() {
     api.sessions.getSessions,
     convexUser?._id ? { userId: convexUser._id } : 'skip'
   );
-  const activeSessions = useQuery(
-    api.sessions.getActiveSessions,
-    convexUser?._id ? { userId: convexUser._id } : 'skip'
-  );
 
   const displayName = user?.fullName || user?.firstName || convexUser?.name || 'Scholar';
   const displayEmail = user?.primaryEmailAddress?.emailAddress || convexUser?.email || 'scholar@nexarity.app';
@@ -41,11 +37,11 @@ export default function ProfileScreen() {
   const streakCount = streakData?.streak ?? 0;
   const sessionCount = sessions?.length ?? 0;
   const notesCount = notes?.length ?? 0;
-  const activeSessionCount = activeSessions?.length ?? 0;
-  const firstSession = sessions?.slice().sort((a, b) => a.createdAt - b.createdAt)[0];
+  const strugglesCount = sessionCount - notesCount;
+  const journeyNotes = notes?.slice(0, 3) ?? [];
 
-  const formatSessionDate = (timestamp?: number) => {
-    if (!timestamp) return 'Belum ada sesi';
+  const formatJourneyDate = (timestamp?: number) => {
+    if (!timestamp) return 'Belum ada catatan';
 
     return new Date(timestamp).toLocaleDateString('id-ID', {
       day: '2-digit',
@@ -125,7 +121,7 @@ export default function ProfileScreen() {
           {[
             { label: 'Sessions', val: String(sessionCount), color: 'text-indigo-600' },
             { label: 'Notes', val: String(notesCount), color: 'text-indigo-600' },
-            { label: 'Struggles', val: String(activeSessionCount), color: 'text-red-500' }
+            { label: 'Struggles', val: String(Math.max(0, strugglesCount)), color: 'text-red-500' }
           ].map((stat, i) => (
             <View key={i} className="flex-1 bg-white p-4 rounded-2xl items-center border border-indigo-50 shadow-sm">
               <Text className={`text-2xl font-bold ${stat.color}`}>{stat.val}</Text>
@@ -142,25 +138,25 @@ export default function ProfileScreen() {
           </View>
 
           <View className="pl-4 border-l-2 border-indigo-50 ml-3">
-            {/* Milestone 1 */}
-            <View className="mb-8 relative">
-              <View className="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-indigo-600 border-2 border-white" />
-              <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
-                <Text className="text-xs font-bold text-indigo-400 mb-1">{formatSessionDate(firstSession?.createdAt)}</Text>
-                <Text className="font-bold text-gray-900">First Session</Text>
-                <Text className="text-gray-500 text-sm mt-1 leading-5">Langkah pertama di Nexarity dimulai.</Text>
+            {journeyNotes.length > 0 ? (
+              journeyNotes.map((note, index) => (
+                <View key={note._id} className={`${index < journeyNotes.length - 1 ? 'mb-8' : ''} relative`}>
+                  <View className={`absolute -left-[23px] top-0 w-4 h-4 rounded-full ${index === 0 ? 'bg-indigo-600' : 'bg-indigo-300'} border-2 border-white`} />
+                  <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
+                    <Text className="text-xs font-bold text-indigo-400 mb-1">{formatJourneyDate(note._creationTime)}</Text>
+                    <Text className="font-bold text-gray-900">{note.problem}</Text>
+                    <Text className="text-gray-500 text-sm mt-1 leading-5">{note.finalAnswer || 'Catatan belajar tersimpan di Library.'}</Text>
+                  </View>
+                </View>
+              ))
+            ) : (
+              <View className="relative">
+                <View className="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-indigo-300 border-2 border-white" />
+                <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
+                  <Text className="text-gray-500 text-sm mt-1 leading-5">Belum ada perjalanan belajar. Mulai sesi pertamamu!</Text>
+                </View>
               </View>
-            </View>
-
-            {/* Milestone 2 */}
-            <View className="relative">
-              <View className="absolute -left-[23px] top-0 w-4 h-4 rounded-full bg-indigo-300 border-2 border-white" />
-              <View className="bg-white p-4 rounded-2xl border border-indigo-50 shadow-sm ml-4">
-                <Text className="text-xs font-bold text-indigo-400 mb-1">{streakData?.lastActiveDate || 'Belum aktif'}</Text>
-                <Text className="font-bold text-gray-900">{streakCount}-day streak</Text>
-                <Text className="text-gray-500 text-sm mt-1 leading-5">Momentum belajar terbentuk sempurna.</Text>
-              </View>
-            </View>
+            )}
           </View>
         </View>
 
@@ -187,22 +183,6 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ScrollView>
-
-      {/* Bottom Navigation Mockup (Agar Visual Sesuai) */}
-      <View className="absolute bottom-0 w-full flex-row justify-around items-center px-4 py-3 bg-white/80 border-t border-indigo-50">
-         <TouchableOpacity onPress={() => router.push('/library')} className="items-center opacity-40">
-           <MaterialIcons name="auto-stories" size={24} color="#64748b" />
-           <Text className="text-[10px] mt-1">Library</Text>
-         </TouchableOpacity>
-         <TouchableOpacity onPress={() => router.push('/dashboard')} className="items-center opacity-40">
-           <MaterialIcons name="home" size={24} color="#64748b" />
-           <Text className="text-[10px] mt-1">Home</Text>
-         </TouchableOpacity>
-         <TouchableOpacity className="items-center">
-           <MaterialIcons name="person" size={24} color="#4338ca" />
-           <Text className="text-[10px] text-indigo-700 font-bold mt-1">Profile</Text>
-         </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
