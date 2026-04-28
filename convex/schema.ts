@@ -7,6 +7,8 @@ export default defineSchema({
     clerkId: v.string(),
     email: v.string(),
     name: v.string(),
+    nickname: v.optional(v.string()),
+    learningGoal: v.optional(v.string()),
     field: v.string(),
     pledgeDone: v.boolean(),
     streak: v.number(),

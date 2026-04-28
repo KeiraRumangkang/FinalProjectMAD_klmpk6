@@ -15,9 +15,17 @@ export const upsertUser = mutation({
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
       .unique();
 
+    if (existingUser) {
+      await ctx.db.patch(existingUser._id, {
+        email: args.email,
+        name: args.name,
+      });
+
+      return await ctx.db.get(existingUser._id);
+    }
+
     // Jika belum ada, masukkan sebagai user baru (default values)
-    if (!existingUser) {
-      await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
         clerkId: args.clerkId,
         email: args.email,
         name: args.name,
@@ -25,8 +33,9 @@ export const upsertUser = mutation({
         pledgeDone: false,
         streak: 0,
         lastActiveDate: "",
-      });
-    }
+    });
+
+    return await ctx.db.get(userId);
   },
 });
 
@@ -38,6 +47,14 @@ export const getUser = query({
       .query("users")
       .withIndex("by_clerkId", (q) => q.eq("clerkId", args.clerkId))
       .unique();
+  },
+});
+
+// 2b. Ambil user berdasarkan ID dokumen Convex
+export const getUserById = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
   },
 });
 
@@ -114,5 +131,74 @@ export const getUserStreak = query({
       streak: user.streak,
       lastActiveDate: user.lastActiveDate,
     };
+  },
+});
+
+// 6. Update profil tambahan user
+export const updateProfile = mutation({
+  args: {
+    userId: v.id("users"),
+    nickname: v.optional(v.string()),
+    learningGoal: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User tidak ditemukan");
+
+    const updates: { nickname?: string; learningGoal?: string } = {};
+
+    if (args.nickname !== undefined) {
+      updates.nickname = args.nickname;
+    }
+
+    if (args.learningGoal !== undefined) {
+      updates.learningGoal = args.learningGoal;
+    }
+
+    await ctx.db.patch(args.userId, updates);
+
+    return { success: true };
+  },
+});
+
+// 7. Hapus akun dan data belajar terkait
+export const deleteUser = mutation({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    if (!user) throw new Error("User tidak ditemukan");
+
+    const sessions = await ctx.db
+      .query("sessions")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    const notes = await ctx.db
+      .query("notes")
+      .withIndex("by_userId", (q) => q.eq("userId", args.userId))
+      .collect();
+
+    for (const session of sessions) {
+      const messages = await ctx.db
+        .query("messages")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
+        .collect();
+
+      for (const message of messages) {
+        await ctx.db.delete(message._id);
+      }
+    }
+
+    for (const note of notes) {
+      await ctx.db.delete(note._id);
+    }
+
+    for (const session of sessions) {
+      await ctx.db.delete(session._id);
+    }
+
+    await ctx.db.delete(args.userId);
+
+    return { success: true };
   },
 });

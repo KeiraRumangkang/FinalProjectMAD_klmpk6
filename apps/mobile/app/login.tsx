@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useClerk, useOAuth, useSignIn, useSignUp, useUser } from '@clerk/clerk-expo';
 import { useMutation, useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
@@ -18,6 +18,15 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { api } from '../../../convex/_generated/api';
+
+type ConvexUserForRouting = {
+  field?: string;
+  pledgeDone?: boolean;
+} | null | undefined;
+
+const hasCompletedOnboarding = (userProfile: ConvexUserForRouting) => {
+  return Boolean(userProfile?.pledgeDone || userProfile?.field?.trim());
+};
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -47,7 +56,14 @@ export default function LoginScreen() {
     lastName?: string | null;
   };
 
-  const syncUserToConvex = async (sessionUser: ClerkUserForConvex | null | undefined, fallbackEmail = email.trim()) => {
+  const routeAfterAuth = useCallback((userProfile: ConvexUserForRouting) => {
+    router.replace(hasCompletedOnboarding(userProfile) ? '/dashboard' : '/onboarding/field');
+  }, [router]);
+
+  const syncUserToConvex = useCallback(async (
+    sessionUser: ClerkUserForConvex | null | undefined,
+    fallbackEmail = email.trim()
+  ) => {
 
     const resolvedEmail =
       sessionUser?.primaryEmailAddress?.emailAddress ??
@@ -64,20 +80,20 @@ export default function LoginScreen() {
       throw new Error('Unable to read Clerk user profile after authentication.');
     }
 
-    await upsertUser({
+    return await upsertUser({
       clerkId: sessionUser.id,
       email: resolvedEmail,
       name: resolvedName,
     });
-  };
+  }, [email, upsertUser]);
 
-  const syncActiveUserToConvex = async (sessionId: string, fallbackEmail = email.trim()) => {
+  const syncActiveUserToConvex = useCallback(async (sessionId: string, fallbackEmail = email.trim()) => {
     const sessionUser =
       clerk.client?.sessions?.find((session) => session.id === sessionId)?.user ??
       clerk.user;
 
-    await syncUserToConvex(sessionUser, fallbackEmail);
-  };
+    return await syncUserToConvex(sessionUser, fallbackEmail);
+  }, [clerk, email, syncUserToConvex]);
 
   const getAuthErrorMessage = (error: unknown) => {
     const clerkError = error as {
@@ -98,8 +114,8 @@ export default function LoginScreen() {
 
     try {
       if (isSignedIn && currentUser) {
-        await syncUserToConvex(currentUser);
-        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        const syncedUser = await syncUserToConvex(currentUser);
+        routeAfterAuth(syncedUser ?? convexUser);
         return;
       }
 
@@ -121,16 +137,16 @@ export default function LoginScreen() {
 
       if (signInAttempt.status === 'complete' && signInAttempt.createdSessionId) {
         await setActive({ session: signInAttempt.createdSessionId });
-        await syncActiveUserToConvex(signInAttempt.createdSessionId);
-        router.replace('/onboarding/field');
+        const syncedUser = await syncActiveUserToConvex(signInAttempt.createdSessionId);
+        routeAfterAuth(syncedUser);
       } else {
         console.log('Sign in requires additional steps:', signInAttempt.status);
       }
     } catch (error) {
       const message = getAuthErrorMessage(error);
       if (message.toLowerCase().includes('already signed in') && currentUser) {
-        await syncUserToConvex(currentUser);
-        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        const syncedUser = await syncUserToConvex(currentUser);
+        routeAfterAuth(syncedUser ?? convexUser);
         return;
       }
 
@@ -146,8 +162,8 @@ export default function LoginScreen() {
 
     try {
       if (isSignedIn && currentUser) {
-        await syncUserToConvex(currentUser);
-        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        const syncedUser = await syncUserToConvex(currentUser);
+        routeAfterAuth(syncedUser ?? convexUser);
         return;
       }
 
@@ -171,14 +187,14 @@ export default function LoginScreen() {
         }
 
         await activateSession({ session: createdSessionId });
-        await syncActiveUserToConvex(createdSessionId);
-        router.replace('/onboarding/field');
+        const syncedUser = await syncActiveUserToConvex(createdSessionId);
+        routeAfterAuth(syncedUser);
       }
     } catch (error) {
       const message = getAuthErrorMessage(error);
       if (message.toLowerCase().includes('already signed in') && currentUser) {
-        await syncUserToConvex(currentUser);
-        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        const syncedUser = await syncUserToConvex(currentUser);
+        routeAfterAuth(syncedUser ?? convexUser);
         return;
       }
 
@@ -194,8 +210,8 @@ export default function LoginScreen() {
 
     try {
       if (isSignedIn && currentUser) {
-        await syncUserToConvex(currentUser);
-        router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+        const syncedUser = await syncUserToConvex(currentUser);
+        routeAfterAuth(syncedUser ?? convexUser);
         return;
       }
 
@@ -223,8 +239,8 @@ export default function LoginScreen() {
         }
 
         await activateSession({ session: signUpAttempt.createdSessionId });
-        await syncActiveUserToConvex(signUpAttempt.createdSessionId);
-        router.replace('/onboarding/field');
+        const syncedUser = await syncActiveUserToConvex(signUpAttempt.createdSessionId);
+        routeAfterAuth(syncedUser);
         return;
       }
 
@@ -257,11 +273,11 @@ export default function LoginScreen() {
 
     const continueSignedInSession = async () => {
       try {
-        await syncUserToConvex(currentUser);
+        const syncedUser = await syncUserToConvex(currentUser);
 
         if (isMounted) {
           setHasRedirectedSignedInUser(true);
-          router.replace(convexUser?.pledgeDone ? '/dashboard' : '/onboarding/field');
+          routeAfterAuth(syncedUser ?? convexUser);
         }
       } catch (error) {
         console.warn('Continue signed-in session failed:', getAuthErrorMessage(error));
@@ -273,7 +289,15 @@ export default function LoginScreen() {
     return () => {
       isMounted = false;
     };
-  }, [isUserLoaded, isSignedIn, currentUser?.id, convexUser, hasRedirectedSignedInUser]);
+  }, [
+    isUserLoaded,
+    isSignedIn,
+    currentUser,
+    convexUser,
+    hasRedirectedSignedInUser,
+    routeAfterAuth,
+    syncUserToConvex,
+  ]);
 
   return (
     <SafeAreaView style={styles.safeArea}>

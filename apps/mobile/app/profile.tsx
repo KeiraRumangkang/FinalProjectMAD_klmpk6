@@ -30,10 +30,11 @@ export default function ProfileScreen() {
     convexUser?._id ? { userId: convexUser._id } : 'skip'
   );
 
-  const displayName = user?.fullName || user?.firstName || convexUser?.name || 'Scholar';
+  const displayName = convexUser?.nickname?.trim() || user?.firstName || user?.fullName || convexUser?.name || 'Scholar';
   const displayEmail = user?.primaryEmailAddress?.emailAddress || convexUser?.email || 'scholar@nexarity.app';
   const avatarUrl = user?.imageUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
   const fieldLabel = convexUser?.field || 'Scholar';
+  const learningGoal = convexUser?.learningGoal?.trim() || 'Target belajar belum diatur.';
   const streakCount = streakData?.streak ?? 0;
   const sessionCount = sessions?.length ?? 0;
   const notesCount = notes?.length ?? 0;
@@ -56,7 +57,7 @@ export default function ProfileScreen() {
   };
 
   const menuItems = [
-    { icon: 'person-edit', label: 'Edit Profile', color: '#4338ca', onPress: () => router.push('/profile/edit') },
+    { icon: 'person-edit', label: 'Edit Profile', color: '#4338ca', onPress: () => router.push('/edit-profile') },
     { icon: 'settings-suggest', label: 'Pengaturan', color: '#4338ca', onPress: () => router.push('/settings') },
     { icon: 'help-center', label: 'Bantuan', color: '#4338ca', onPress: () => router.push('/settings') },
     { icon: 'logout', label: 'Logout', color: '#ef4444', onPress: handleLogout },
@@ -90,12 +91,23 @@ export default function ProfileScreen() {
             </View>
           </View>
           
-          <Text className="text-2xl font-bold text-gray-900 mt-4">{displayName}</Text>
-          <Text className="text-gray-500 font-medium">{displayEmail}</Text>
-          
-          <View className="mt-4 px-4 py-1.5 bg-indigo-100 rounded-full flex-row items-center gap-2">
-            <MaterialIcons name="psychology" size={16} color="#4338ca" />
-            <Text className="text-indigo-700 font-bold text-xs uppercase tracking-widest">{fieldLabel}</Text>
+          <View className="flex-col items-center gap-2 mt-4 w-full">
+            <Text className="text-2xl font-bold text-gray-900 text-center">{displayName}</Text>
+            <Text className="text-gray-500 font-medium text-center" numberOfLines={1}>{displayEmail}</Text>
+            <View className="px-4 py-1.5 bg-indigo-100 rounded-full flex-row items-center gap-2 max-w-full">
+              <MaterialIcons name="psychology" size={16} color="#4338ca" />
+              <Text className="text-indigo-700 font-bold text-xs uppercase tracking-widest text-center">{fieldLabel}</Text>
+            </View>
+          </View>
+
+          <View className="w-full bg-emerald-50 border border-emerald-100 rounded-3xl p-5 mt-6">
+            <View className="flex-row items-center gap-2 mb-2">
+              <MaterialIcons name="flag" size={20} color="#047857" />
+              <Text className="text-xs font-bold text-emerald-700 uppercase tracking-widest">Target Belajar</Text>
+            </View>
+            <Text className="text-[16px] text-emerald-900 font-serif italic leading-6">
+              {learningGoal}
+            </Text>
           </View>
         </View>
 

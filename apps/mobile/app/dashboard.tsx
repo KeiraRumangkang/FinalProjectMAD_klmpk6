@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useClerk, useUser } from '@clerk/clerk-expo';
 import { useMutation, useQuery } from 'convex/react';
 import { 
@@ -9,6 +9,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter, usePathname } from 'expo-router';
 import { api } from '../../../convex/_generated/api';
 
+const SOCRATIC_QUOTES = [
+  'The only true wisdom is in knowing you know nothing. - Socrates',
+  'Education is the kindling of a flame, not the filling of a vessel. - Socrates',
+  'I cannot teach anybody anything. I can only make them think. - Socrates',
+  'Wonder is the beginning of wisdom. - Socrates',
+  'The unexamined life is not worth living. - Socrates',
+  'Strong minds discuss ideas; curious minds ask better questions.',
+  'Learning begins when certainty becomes a question.',
+];
+
 export default function DashboardScreen() {
   const router = useRouter();
   const pathname = usePathname();
@@ -17,12 +27,16 @@ export default function DashboardScreen() {
   const [question, setQuestion] = useState('');
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
-  const displayName = user?.firstName || user?.fullName || 'Student';
+  const quoteOfTheDay = useMemo(() => {
+    return SOCRATIC_QUOTES[Math.floor(Math.random() * SOCRATIC_QUOTES.length)];
+  }, []);
   const avatarUrl = user?.imageUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
   const convexUser = useQuery(
     api.users.getUser,
     user?.id ? { clerkId: user.id } : 'skip'
   );
+  const displayName = convexUser?.nickname?.trim() || user?.firstName || user?.fullName || 'Student';
+  const learningGoal = convexUser?.learningGoal?.trim();
   const streakData = useQuery(
     api.users.getUserStreak,
     convexUser?._id ? { userId: convexUser._id } : 'skip'
@@ -240,9 +254,33 @@ export default function DashboardScreen() {
         {/* Welcome Section */}
         <View className="mb-6">
           <Text className="text-3xl font-bold text-gray-900 mb-1 font-serif">Selamat Belajar,</Text>
-          <Text className="text-3xl font-bold text-gray-900 mb-2 font-serif">yang semangat ya! </Text>
+          <Text className="text-3xl font-bold text-gray-900 mb-2 font-serif">{displayName}</Text>
           <Text className="text-base text-gray-500">Apa yang ingin kamu diskusikan hari ini?</Text>
         </View>
+
+        {/* Learning Goal Banner */}
+        <TouchableOpacity
+          activeOpacity={learningGoal ? 1 : 0.85}
+          onPress={() => {
+            if (!learningGoal) router.push('/edit-profile');
+          }}
+          className="bg-emerald-50 rounded-3xl shadow-sm border border-emerald-200 p-5 mb-8 overflow-hidden"
+        >
+          <View className="absolute -right-8 -top-8 w-24 h-24 bg-emerald-100 rounded-full opacity-70" />
+          <View className="flex-row items-start gap-3">
+            <View className="w-11 h-11 rounded-2xl bg-white items-center justify-center border border-emerald-100 shadow-sm">
+              <MaterialIcons name="flag" size={23} color="#047857" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-xs font-bold text-emerald-700 uppercase tracking-widest mb-1">
+                Fokus Tujuanmu:
+              </Text>
+              <Text className="text-[16px] text-emerald-950 font-serif leading-6">
+                {learningGoal || 'Tetapkan target belajarmu di menu Edit Profile!'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
 
         {/* Input Card */}
         <View className="bg-white rounded-3xl shadow-sm border border-indigo-50 p-5 mb-8">
@@ -255,11 +293,7 @@ export default function DashboardScreen() {
             value={question}
             onChangeText={setQuestion}
           />
-          <View className="flex-row justify-between items-end mt-4">
-            <View className="flex-row gap-4">
-              <TouchableOpacity><MaterialIcons name="attach-file" size={22} color="#6b7280" /></TouchableOpacity>
-              <TouchableOpacity><MaterialIcons name="image" size={22} color="#6b7280" /></TouchableOpacity>
-            </View>
+          <View className="flex-row justify-end items-end mt-4">
             <TouchableOpacity 
               className="px-6 py-3 bg-[#e2dfff] rounded-full flex-row items-center gap-2"
               onPress={handleStartSession}
@@ -269,6 +303,21 @@ export default function DashboardScreen() {
               <MaterialIcons name="auto-awesome" size={18} color="#403e85" />
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Socratic Quote Card */}
+        <View className="bg-emerald-50 rounded-3xl shadow-sm border border-emerald-100 p-5 mb-8">
+          <View className="flex-row items-center gap-2 mb-3">
+            <View className="w-9 h-9 rounded-full bg-emerald-100 items-center justify-center">
+              <MaterialIcons name="format-quote" size={21} color="#047857" />
+            </View>
+            <Text className="text-sm font-bold text-emerald-700 uppercase tracking-widest">
+              Socratic Quote
+            </Text>
+          </View>
+          <Text className="text-[17px] text-emerald-900 italic leading-7 font-serif">
+            {quoteOfTheDay}
+          </Text>
         </View>
 
         {/* Section: Sedang Dipelajari */}
